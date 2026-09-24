@@ -9,13 +9,20 @@ def main() -> None:
         version = run_query("SELECT @@VERSION AS version")
         print(version[0]["version"].splitlines()[0])
 
-        students = run_query(
-            "SELECT FullName, Grade FROM dbo.Students WHERE City = ?",
+        schools = run_query(
+            """
+            SELECT sc.SchoolName, COUNT(*) AS StudentCount
+            FROM dbo.Students s
+            JOIN dbo.Schools sc ON sc.SchoolId = s.SchoolId
+            WHERE sc.City = ?
+            GROUP BY sc.SchoolName
+            ORDER BY sc.SchoolName
+            """,
             ("Coimbatore",),
         )
-        print(f"\nStudents in Coimbatore: {len(students)}")
-        for student in students:
-            print(f"  {student['FullName']} (grade {student['Grade']})")
+        print("\nStudents per school in Coimbatore:")
+        for school in schools:
+            print(f"  {school['SchoolName']}: {school['StudentCount']}")
     except (ConfigError, DatabaseError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -23,8 +30,8 @@ def main() -> None:
     print("\nSecurity check: attempting an INSERT (should be refused)...")
     try:
         run_query(
-            "INSERT INTO dbo.Students (FullName, City, Grade) VALUES (?, ?, ?)",
-            ("Test Student", "Test City", 1),
+            "INSERT INTO dbo.Schools (SchoolName, City, State, SchoolType) VALUES (?, ?, ?, ?)",
+            ("Test School", "Test City", "Test State", "Private"),
         )
         print("WARNING: INSERT was accepted. The login is NOT read-only!")
     except DatabaseError as e:

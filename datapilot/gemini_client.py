@@ -54,6 +54,21 @@ def ask(question: str) -> str:
     return _generate_text(question)
 
 
+def count_tokens(text: str) -> int:
+    settings = get_settings()
+
+    try:
+        response = _get_client().models.count_tokens(
+            model=settings.gemini_model, contents=text
+        )
+    except errors.APIError as e:
+        raise GeminiError(
+            f"Gemini token count failed (HTTP {e.code} {e.status}): {e.message}"
+        ) from e
+
+    return response.total_tokens or 0
+
+
 def ask_structured(prompt: str, schema: type[T]) -> T:
     text = _generate_text(prompt, response_schema=schema)
 
