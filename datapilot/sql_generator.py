@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 from datapilot.gemini_client import ask_structured
-from datapilot.schema import discover_schema, format_schema_for_prompt
+from datapilot.schema import DatabaseSchema, discover_schema, format_schema_for_prompt
 
 
 class SqlGeneration(BaseModel):
@@ -55,7 +55,7 @@ _PROMPT = """Database schema:
 Question: {question}"""
 
 
-def generate_sql(question: str) -> SqlGeneration:
-    schema_text = format_schema_for_prompt(discover_schema())
+def generate_sql(question: str, schema: DatabaseSchema | None = None) -> SqlGeneration:
+    schema_text = format_schema_for_prompt(schema or discover_schema())
     prompt = _PROMPT.format(schema=schema_text, question=question)
     return ask_structured(prompt, SqlGeneration, system_instruction=SYSTEM_INSTRUCTION)

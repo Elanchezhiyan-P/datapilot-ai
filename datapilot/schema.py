@@ -100,6 +100,9 @@ class DatabaseSchema(BaseModel):
     database_name: str
     tables: list[TableInfo]
 
+    def table_names(self) -> set[str]:
+        return {table.full_name for table in self.tables}
+
 
 def _format_type(row: dict) -> str:
     type_name = row["type_name"]

@@ -3,7 +3,9 @@ import sys
 from datapilot.config import ConfigError
 from datapilot.database import DatabaseError
 from datapilot.gemini_client import GeminiError
+from datapilot.schema import discover_schema
 from datapilot.sql_generator import generate_sql
+from datapilot.sql_validator import validate_sql
 
 TEST_QUESTIONS = [
     "How many students are there?",
@@ -20,17 +22,30 @@ TEST_QUESTIONS = [
 
 def main() -> None:
     try:
+        schema = discover_schema()
+        allowed_tables = schema.table_names()
+
         for number, question in enumerate(TEST_QUESTIONS, start=1):
-            result = generate_sql(question)
+            result = generate_sql(question, schema)
 
             print(f"=== Q{number}: {question}")
             print(f"can_answer:  {result.can_answer}")
-            print(f"tables_used: {result.tables_used}")
             print(f"explanation: {result.explanation}")
             if result.clarification_needed:
                 print(f"clarify:     {result.clarification_needed}")
+
             if result.sql:
                 print(f"sql:\n{result.sql}")
+                validation = validate_sql(result.sql, allowed_tables)
+                verdict = "VALID" if validation.is_valid else "BLOCKED"
+                print(f"validation:  {verdict}")
+                for error in validation.errors:
+                    print(f"  - {error}")
+
+                claimed = {table.lower() for table in result.tables_used}
+                if claimed != set(validation.tables):
+                    print(f"  ! Gemini claimed tables {sorted(claimed)}, "
+                          f"SQL actually uses {validation.tables}")
             print()
     except (ConfigError, DatabaseError, GeminiError) as e:
         print(f"Error: {e}", file=sys.stderr)

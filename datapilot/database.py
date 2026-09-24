@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 import pyodbc
@@ -6,6 +7,14 @@ from datapilot.config import Settings, get_settings
 
 LOGIN_TIMEOUT_SECONDS = 5
 QUERY_TIMEOUT_SECONDS = 30
+DEFAULT_MAX_ROWS = 1000
+
+
+@dataclass(frozen=True)
+class QueryResult:
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    truncated: bool
 
 
 class DatabaseError(Exception):
@@ -59,6 +68,32 @@ def run_query(sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
 
         columns = [column[0] for column in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    except pyodbc.Error as e:
+        raise DatabaseError(f"Query failed: {e}") from e
+    finally:
+        connection.close()
+
+
+def run_readonly_query(sql: str, max_rows: int = DEFAULT_MAX_ROWS) -> QueryResult:
+    """Run already-validated SQL and return at most max_rows rows.
+
+    "Read-only" is enforced by the database login and the SQL validator,
+    not by this function. Always validate the SQL before calling it.
+    """
+    connection = get_connection()
+
+    try:
+        cursor = connection.cursor()
+        cursor.execute(sql)
+
+        if cursor.description is None:
+            return QueryResult(columns=[], rows=[], truncated=False)
+
+        columns = [column[0] for column in cursor.description]
+        # Fetch one extra row: if it arrives, the result was cut off.
+        fetched = cursor.fetchmany(max_rows + 1)
+        rows = [dict(zip(columns, row)) for row in fetched[:max_rows]]
+        return QueryResult(columns=columns, rows=rows, truncated=len(fetched) > max_rows)
     except pyodbc.Error as e:
         raise DatabaseError(f"Query failed: {e}") from e
     finally:
