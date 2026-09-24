@@ -1,9 +1,13 @@
 from functools import lru_cache
+from typing import TypeVar
 
 from google import genai
-from google.genai import errors
+from google.genai import errors, types
+from pydantic import BaseModel, ValidationError
 
 from datapilot.config import get_settings
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class GeminiError(Exception):
@@ -16,13 +20,21 @@ def _get_client() -> genai.Client:
     return genai.Client(api_key=settings.gemini_api_key)
 
 
-def ask(question: str) -> str:
+def _generate_text(
+    contents: str, response_schema: type[BaseModel] | None = None
+) -> str:
     settings = get_settings()
+
+    config = types.GenerateContentConfig(temperature=settings.gemini_temperature)
+    if response_schema is not None:
+        config.response_mime_type = "application/json"
+        config.response_schema = response_schema
 
     try:
         response = _get_client().models.generate_content(
             model=settings.gemini_model,
-            contents=question,
+            contents=contents,
+            config=config,
         )
     except errors.APIError as e:
         raise GeminiError(
@@ -36,3 +48,18 @@ def ask(question: str) -> str:
         raise GeminiError(f"Gemini returned no text (finish reason: {finish_reason}).")
 
     return response.text
+
+
+def ask(question: str) -> str:
+    return _generate_text(question)
+
+
+def ask_structured(prompt: str, schema: type[T]) -> T:
+    text = _generate_text(prompt, response_schema=schema)
+
+    try:
+        return schema.model_validate_json(text)
+    except ValidationError as e:
+        raise GeminiError(
+            f"Gemini response did not match {schema.__name__}: {e}"
+        ) from e
