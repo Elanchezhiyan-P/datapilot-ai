@@ -75,6 +75,22 @@ def test_validate_blocks_delete(client) -> None:
     assert body["is_valid"] is False
 
 
+def test_report_returns_chart_and_download_links(client) -> None:
+    body = client.post("/report", json={"question": "How many students?"}).json()
+
+    assert body["chart"]["type"] == "none"          # a single value is not charted
+    assert body["summary"][0]["name"] == "n"
+    html_page = client.get(body["html_url"])
+    assert html_page.status_code == 200 and "There are 3000 students." in html_page.text
+    csv_file = client.get(body["csv_url"])
+    assert csv_file.headers["content-type"].startswith("text/csv")
+    assert csv_file.text.splitlines() == ["n", "3000"]
+
+
+def test_unknown_report_is_404(client) -> None:
+    assert client.get("/reports/nope.csv").status_code == 404
+
+
 def test_swagger_lists_sample_questions(client) -> None:
     spec = client.get("/openapi.json").json()
     examples = spec["paths"]["/ask"]["post"]["requestBody"]["content"]["application/json"]["examples"]
