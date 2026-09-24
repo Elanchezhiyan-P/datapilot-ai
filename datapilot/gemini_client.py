@@ -57,8 +57,8 @@ def _generate_text(
     return response.text
 
 
-def ask(question: str) -> str:
-    return _generate_text(question)
+def ask(question: str, system_instruction: str | None = None) -> str:
+    return _generate_text(question, system_instruction=system_instruction)
 
 
 def count_tokens(text: str) -> int:

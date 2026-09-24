@@ -42,6 +42,9 @@ Rules:
 - When a column lists VALUES, compare only against those exact values.
 - Scores from different exams may have different MaxScore values; use
   Score * 100.0 / MaxScore when comparing or averaging scores across exams.
+- When ranking or finding a highest/lowest value, also return the value itself
+  (e.g. the average score), not only the name.
+- Give computed columns clear aliases, e.g. AS StudentCount.
 - If the question is not about this data, or asks you to change data,
   set can_answer to false and sql to null.
 - If the question is too vague to write a meaningful query, set can_answer
