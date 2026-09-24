@@ -21,11 +21,18 @@ def _get_client() -> genai.Client:
 
 
 def _generate_text(
-    contents: str, response_schema: type[BaseModel] | None = None
+    contents: str,
+    response_schema: type[BaseModel] | None = None,
+    system_instruction: str | None = None,
 ) -> str:
     settings = get_settings()
 
-    config = types.GenerateContentConfig(temperature=settings.gemini_temperature)
+    config = types.GenerateContentConfig(
+        temperature=settings.gemini_temperature,
+        system_instruction=system_instruction,
+        # We call tools ourselves (Milestone 8); stop the SDK doing it implicitly.
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+    )
     if response_schema is not None:
         config.response_mime_type = "application/json"
         config.response_schema = response_schema
@@ -69,8 +76,12 @@ def count_tokens(text: str) -> int:
     return response.total_tokens or 0
 
 
-def ask_structured(prompt: str, schema: type[T]) -> T:
-    text = _generate_text(prompt, response_schema=schema)
+def ask_structured(
+    prompt: str, schema: type[T], system_instruction: str | None = None
+) -> T:
+    text = _generate_text(
+        prompt, response_schema=schema, system_instruction=system_instruction
+    )
 
     try:
         return schema.model_validate_json(text)
