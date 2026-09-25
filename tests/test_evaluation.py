@@ -123,9 +123,15 @@ def test_summary_metrics() -> None:
                                             summary, None, results)
 
 
-def test_question_file_is_valid() -> None:
-    questions = load_questions()
-    ids = [q.id for q in questions]
-    assert len(ids) == len(set(ids))
-    for q in questions:
+def test_question_files_are_valid() -> None:
+    benchmark = load_questions()
+    extra = load_questions(path=evaluation.BASE_DIR / "evaluation" / "extra_questions.json")
+    ids = [q.id for q in benchmark + extra]
+    assert len(ids) == len(set(ids)), "an id appears twice"
+    for q in benchmark + extra:
         assert (q.gold_sql is not None) == (q.expected_behavior == "answer"), q.id
+
+
+def test_the_benchmark_is_ten_questions() -> None:
+    # The default run is the 10-question benchmark reported in the README.
+    assert len(load_questions()) == 10

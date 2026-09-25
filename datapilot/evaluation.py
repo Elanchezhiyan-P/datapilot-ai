@@ -1,9 +1,13 @@
 """Evaluation: run the benchmark questions and measure DataPilot.
 
     python -m datapilot.evaluation --dry-run            # gold SQL + validator only, no Gemini
-    python -m datapilot.evaluation --limit 10           # first 10 questions, fast mode (asks first)
+    python -m datapilot.evaluation                      # the 10-question benchmark, fast mode (asks first)
     python -m datapilot.evaluation --system agent       # thorough mode (the agent)
     python -m datapilot.evaluation --system pipeline    # the Milestone 7 pipeline
+
+The benchmark is evaluation/questions.json (10 questions). evaluation/extra_questions.json
+holds more checked questions that are not part of the benchmark; run them only on
+purpose with --file evaluation/extra_questions.json.
 
 How an answer is judged:
 - answerable question: DataPilot's final query result must match the result of the
@@ -326,8 +330,9 @@ def to_markdown(meta: dict[str, Any], summary: dict[str, Any],
 # CLI
 # ---------------------------------------------------------------------------
 
-def load_questions(ids: list[str] | None = None, limit: int | None = None) -> list[Question]:
-    questions = [Question(**q) for q in json.loads(QUESTIONS_FILE.read_text(encoding="utf-8"))]
+def load_questions(ids: list[str] | None = None, limit: int | None = None,
+                   path: Path = QUESTIONS_FILE) -> list[Question]:
+    questions = [Question(**q) for q in json.loads(path.read_text(encoding="utf-8"))]
     if ids:
         questions = [q for q in questions if q.id in ids]
     return questions[:limit] if limit else questions
@@ -359,12 +364,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--system", choices=["fast", "agent", "pipeline"], default="fast")
     parser.add_argument("--limit", type=int, help="only the first N questions")
     parser.add_argument("--ids", nargs="+", help="only these question ids")
+    parser.add_argument("--file", type=Path, default=QUESTIONS_FILE,
+                        help="question file (default: the 10-question benchmark)")
     parser.add_argument("--dry-run", action="store_true", help="gold SQL + validator only, no Gemini")
     parser.add_argument("--yes", action="store_true", help="skip the Gemini cost confirmation")
     parser.add_argument("--delay", type=float, default=0.0, help="seconds to wait between questions")
     args = parser.parse_args(argv)
 
-    questions = load_questions(args.ids, args.limit)
+    questions_file = args.file if args.file.is_absolute() else BASE_DIR / args.file
+    questions = load_questions(args.ids, args.limit, questions_file)
     if args.dry_run:
         return dry_run(questions)
 
@@ -399,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     corpus = validator_corpus_summary()
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     meta = {"timestamp": timestamp, "system": args.system, "model": get_settings().gemini_model,
-            "questions_file": str(QUESTIONS_FILE.relative_to(BASE_DIR))}
+            "questions_file": str(questions_file.relative_to(BASE_DIR))}
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     payload = {"meta": meta, "summary": summary, "validator_corpus": corpus,
