@@ -54,7 +54,7 @@ def test_status_shows_only_the_last_four_characters(monkeypatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", FAKE_KEY)
     monkeypatch.setenv("GEMINI_MODEL", "gemini-test")
     status = gemini_status()
-    assert status == {"configured": True, "model": "gemini-test", "key_hint": "…1234"}
+    assert status == {"configured": True, "model": "gemini-test", "key_hint": "...1234"}
 
 
 def test_verify_keeps_the_client_open_until_the_request_is_sent(monkeypatch) -> None:
@@ -110,7 +110,7 @@ def test_setting_the_key_from_this_computer(monkeypatch, no_gemini) -> None:
     assert response.status_code == 200
     assert checked == [(FAKE_KEY, "gemini-test")]
     body = response.json()
-    assert body["gemini_configured"] is True and body["key_hint"] == "…1234"
+    assert body["gemini_configured"] is True and body["key_hint"] == "...1234"
     assert FAKE_KEY not in response.text   # the key is never sent back
 
 

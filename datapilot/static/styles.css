@@ -186,7 +186,7 @@ code, .mono { font-family: var(--font-mono); }
 .side-list div:hover { background: var(--surface-2); }
 .side-list dt { color: var(--ink-2); }
 .side-list dd { margin: 0; font: 500 13px/1.6 var(--font-mono); color: var(--readout); font-variant-numeric: tabular-nums; }
-/* minmax(0, 1fr) lets long questions shrink to "…" instead of widening the sidebar. */
+/* minmax(0, 1fr) lets long questions shrink to "..." instead of widening the sidebar. */
 .side-links, .side-history-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .side-history-list { list-style: none; margin: 0; padding: 0; }
 .side-links button, .side-history-list button {

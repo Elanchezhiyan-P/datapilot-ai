@@ -1,12 +1,5 @@
-"""The welcome message: greet the user by name and summarise what the data holds.
-
-By default everything comes from the database: real row counts from SQL and a
-template greeting, so starting a chat uses no Gemini tokens.
-
-With use_ai=True, Gemini writes the greeting around the counts (one call). That
-greeting goes through the same grounding check as answers: if it contains a number
-that is not a real count, or Gemini fails, the template greeting is used instead.
-"""
+"""Welcome message: greeting plus row counts from the database. Uses no Gemini
+call unless use_ai=True, and falls back to the template if the AI greeting fails."""
 import re
 from typing import Literal
 

@@ -1,10 +1,5 @@
-"""The tool-calling loop, written by hand.
-
-    user question
-      -> Gemini: answer, or request tool calls
-      -> we run the tools, append the results
-      -> Gemini again ... until it answers or we hit the turn limit
-"""
+"""Tool-calling loop: Gemini asks for tools, we run them and send the results
+back, until it answers or the turn limit is reached."""
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -86,7 +81,7 @@ def run_tool_loop(
         if not calls:
             answer = (response.text or "").strip()
             if not answer and not nudged:
-                # Seen in practice: the model gets the rows, then returns no text.
+                # Empty reply after a tool result: ask once more for the answer.
                 nudged = True
                 contents.append(user_message(EMPTY_ANSWER_NUDGE))
                 continue

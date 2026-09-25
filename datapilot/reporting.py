@@ -335,7 +335,7 @@ def render_html(question: str, answer: str, sql: str | None, columns: list[str],
     stats = "".join(
         f'<div class="card stat"><div class="meta">{e(s.name)} (total / mean)</div>'
         f'<div class="v">{_format_number(s.total)}</div>'
-        f'<div class="meta">mean {_format_number(s.mean)} · min {_format_number(s.min)} · '
+        f'<div class="meta">mean {_format_number(s.mean)}, min {_format_number(s.min)}, '
         f'max {_format_number(s.max)}</div></div>'
         for s in summary if s.kind == "number" and not _TIME_NAME.search(s.name)
         and not _ID_NAME.search(s.name)

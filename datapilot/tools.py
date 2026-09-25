@@ -154,7 +154,7 @@ class ToolBox:
             return {"error": "Likely wrong join.", "details": join_problems,
                     "valid_joins": self.get_relationships()["relationships"]}
 
-        # Enforced here because the prompt alone did not stop the model guessing columns.
+        # Refuse SQL until the model has looked at the schema.
         if not self._schema_looked_up:
             return {"error": "Look up the schema first with get_database_schema or "
                              "get_table_schema, then write the query using real column names."}

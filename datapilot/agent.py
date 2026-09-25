@@ -1,11 +1,5 @@
-"""DataPilot agent: investigate with tools, then verify the answer before returning it.
-
-What makes this an agent rather than the Milestone 8 loop:
-- it investigates in several steps (schema, real filter values, query, check),
-- it recovers from tool errors,
-- its answer is verified in code (every number must come from a query result),
-  and it is sent back to fix the answer when verification fails.
-"""
+"""Thorough mode: an agent that uses tools, retries failed queries and checks
+that every number in its answer comes from a query result."""
 import time
 from typing import Any
 
@@ -93,11 +87,8 @@ class AgentResult(BaseModel):
 
 
 def build_question_message(question: str, history: list[HistoryTurn]) -> types.Content:
-    """Earlier turns go in as labelled context inside the user message.
-
-    They are deliberately NOT replayed as model-role messages: when we did that, the
-    model imitated them and wrote SQL into its answer instead of calling the tool.
-    """
+    """Earlier turns go in as labelled context inside the user message, not as model
+    turns: the model tends to copy the format of its own previous turns."""
     if not history:
         return user_message(question)
 
@@ -148,7 +139,7 @@ class Agent:
         llm_calls = outcome.turns
         answer = outcome.answer
 
-        # Seen in practice: the model answers "the query failed" instead of fixing it.
+        # Don't accept "the query failed" as an answer; send the error back instead.
         nudges = 0
         while ((failed := _last_failed_query(steps)) and not outcome.stopped_early
                and nudges < MAX_ERROR_RECOVERY_NUDGES and llm_calls < MAX_TURNS):
@@ -178,8 +169,7 @@ class Agent:
 
         final = _last_successful_query(steps)
 
-        # Seen in practice: the query succeeds, but the model writes no answer even
-        # after a nudge. Fall back to the Milestone 7 generator, which answers from rows.
+        # No answer text even though a query worked: write one from the rows.
         if not answer and final is not None:
             rows = final.result.get("rows", [])
             answer = generate_answer(question, QueryResult(

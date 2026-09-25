@@ -33,7 +33,6 @@ def test_foreign_key_join_is_accepted() -> None:
 
 
 def test_join_on_unrelated_columns_is_flagged() -> None:
-    # Seen live: Registrations joined straight to Schools on StudentId = SchoolId.
     sql = "SELECT COUNT(*) FROM dbo.Registrations AS T1 JOIN dbo.Schools AS T3 ON T1.StudentId = T3.SchoolId"
     problems = check_joins(sql, SCHEMA)
     assert len(problems) == 1

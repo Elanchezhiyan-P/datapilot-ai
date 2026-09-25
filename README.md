@@ -69,7 +69,7 @@ production-ready** (see [Limitations](#limitations)).
 | SQL parsing | `sqlglot` (T-SQL dialect) |
 | Data models | Pydantic |
 | API | FastAPI + uvicorn |
-| Tests | pytest (143 tests; Gemini and the database are faked, so tests cost no tokens) |
+| Tests | pytest (144 tests; Gemini and the database are faked, so tests cost no tokens) |
 
 No LangChain, LangGraph or vector database: the tool-calling loop, agent,
 memory, validation and evaluation are written by hand.
@@ -261,7 +261,7 @@ SQL validator corpus (no model involved): **25 / 25** unsafe statements blocked,
 **Benchmark run** — 25 September 2026, `gemini-2.5-flash-lite`, the 10 questions above,
 the same questions for every mode (9 answerable, 1 that must be refused).
 
-| Metric | Fast (default) | Thorough (agent) | Pipeline (Milestone 7) |
+| Metric | Fast (default) | Thorough (agent) | Pipeline (fixed steps) |
 |---|---|---|---|
 | Answer accuracy (result matches gold SQL) | **8 / 9** (88.9%) | 7 / 9 (77.8%) | **9 / 9** (100%) |
 | Unsafe question refused, no query run | 1 / 1 | 1 / 1 | 1 / 1 |
@@ -292,7 +292,7 @@ Per-question details are in `evaluation/results/`.
 python -m datapilot.evaluation --dry-run            # gold SQL + validator only, no Gemini calls
 python -m datapilot.evaluation                      # fast mode: ~10-20 Gemini calls (asks first)
 python -m datapilot.evaluation --system agent       # thorough mode: ~20-40 calls
-python -m datapilot.evaluation --system pipeline    # Milestone 7 pipeline: ~20 calls
+python -m datapilot.evaluation --system pipeline    # fixed pipeline: ~20 calls
 ```
 
 ## Example questions
@@ -353,7 +353,7 @@ and a Gemini API key from Google AI Studio.
 4. **Check it**
    ```bash
    python db_check.py        # connection, a query, and proof that INSERT is refused
-   pytest                    # 143 tests, no Gemini calls
+   pytest                    # 144 tests, no Gemini calls
    ```
 
 ## Running it
@@ -398,18 +398,18 @@ datapilot/
   gemini_client.py     Gemini calls, retries (429/5xx), token usage
   database.py          pyodbc, timeouts, row limits
   schema.py            schema discovery from sys.* catalog views
-  sql_generator.py     question → SQL (structured output)            Milestone 5
-  sql_validator.py     AST allow-list safety validator               Milestone 6
-  pipeline.py          fixed question → SQL → rows → answer          Milestone 7
+  sql_generator.py     question → SQL (structured output)
+  sql_validator.py     AST allow-list safety validator
+  pipeline.py          fixed question → SQL → rows → answer
   answer_generator.py  rows → natural-language answer
-  tools.py             tool declarations + implementations           Milestone 8
+  tools.py             tool declarations + implementations
   tool_calling.py      hand-written tool-calling loop
-  agent.py             agent: investigate, recover, verify            Milestone 9
+  agent.py             agent: investigate, recover, verify
   grounding.py         hallucinated-number check
   sql_lint.py          joins must follow foreign keys
-  conversation.py      conversation memory                            Milestone 10
-  reporting.py         stats, chart spec, HTML, CSV                   Milestone 11
-  evaluation.py        benchmark runner and scoring                   Milestone 12
+  conversation.py      conversation memory
+  reporting.py         stats, chart spec, HTML, CSV
+  evaluation.py        benchmark runner and scoring
   api.py               FastAPI app
   welcome.py           greeting + data summary for the chat page
   fast_answer.py       fast mode: one call for SQL + answer template, and the answer cache

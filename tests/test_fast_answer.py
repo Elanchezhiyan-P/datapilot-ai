@@ -121,14 +121,13 @@ def test_same_words_in_a_different_conversation_context_are_not_cached(gemini, d
 
 
 def test_standalone_question_is_cached_even_after_the_conversation_moves_on(gemini, database) -> None:
-    # Seen live: the repeat missed the cache because three new turns changed the context.
     calls, queue = gemini
     queue.append(_plan())
     answerer = FastAnswerer(SCHEMA)
     question = "How many students attend schools in Coimbatore?"
 
     answerer.run(question)
-    later = [HistoryTurn(question="Monthly registrations", answer="…", sql="SELECT 2")]
+    later = [HistoryTurn(question="Monthly registrations", answer="...", sql="SELECT 2")]
     again = answerer.run(question, later)
 
     assert again.cached and len(calls) == 1
@@ -141,7 +140,6 @@ def test_follow_up_detection() -> None:
 
 
 def test_months_read_as_names_in_sentences() -> None:
-    # Seen live: "There were 301 registrations in 12 of 2025."
     rows = [{"RegistrationYear": 2025, "RegistrationMonth": 12, "RegistrationCount": 301}]
     filled = fill_template("There were {RegistrationCount} registrations in {RegistrationMonth} {RegistrationYear}.",
                            ["RegistrationYear", "RegistrationMonth", "RegistrationCount"], rows)

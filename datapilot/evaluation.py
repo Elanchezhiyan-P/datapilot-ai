@@ -1,21 +1,10 @@
-"""Evaluation: run the benchmark questions and measure DataPilot.
+"""Runs the benchmark in evaluation/questions.json and reports accuracy, calls and timing.
 
-    python -m datapilot.evaluation --dry-run            # gold SQL + validator only, no Gemini
-    python -m datapilot.evaluation                      # the 10-question benchmark, fast mode (asks first)
-    python -m datapilot.evaluation --system agent       # thorough mode (the agent)
-    python -m datapilot.evaluation --system pipeline    # the Milestone 7 pipeline
+    python -m datapilot.evaluation --dry-run          # gold SQL only, no Gemini calls
+    python -m datapilot.evaluation --system agent     # fast (default), agent or pipeline
 
-The benchmark is evaluation/questions.json: 10 questions, the same for every mode.
-
-How an answer is judged:
-- answerable question: DataPilot's final query result must match the result of the
-  hand-written gold SQL (run live, so the expected result always matches the data).
-  Row counts must be equal, and every gold column (or the question's
-  compare_columns) must match some column of the result: extra columns, column
-  names and row order do not matter; numbers match within +-0.05.
-- refuse question: passes if no query was successfully executed.
-
-Numbers reported here are only ever measured, never estimated.
+An answer passes when its query result matches the gold SQL result (same row count,
+values within 0.05). A refuse question passes when no query ran.
 """
 import argparse
 import json
@@ -290,7 +279,7 @@ def to_markdown(meta: dict[str, Any], summary: dict[str, Any],
     lines = [
         f"# DataPilot evaluation: {meta['timestamp']}",
         "",
-        f"System: **{meta['system']}** · model: `{meta['model']}` · questions: {summary['questions_tested']}",
+        f"System: **{meta['system']}** | model: `{meta['model']}` | questions: {summary['questions_tested']}",
         "",
         "| Metric | Value |",
         "|---|---|",
@@ -318,7 +307,7 @@ def to_markdown(meta: dict[str, Any], summary: dict[str, Any],
     failures = [r for r in results if not r.passed]
     lines += ["", f"## Failures ({len(failures)})", ""]
     for r in failures:
-        lines.append(f"- **{r.id}** {r.question} → {r.reason}")
+        lines.append(f"- **{r.id}** {r.question} -> {r.reason}")
         for message in r.error_messages:
             lines.append(f"  - SQL attempt failed: {message}")
     return "\n".join(lines) + "\n"

@@ -116,7 +116,7 @@ function humanize(column) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 // Gemini sometimes adds markdown emphasis; show plain text.
-const plain = (text) => String(text ?? "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^\s*\*\s+/gm, "• ");
+const plain = (text) => String(text ?? "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/^\s*\*\s+/gm, "- ");
 const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
 function toast(text) {
@@ -153,7 +153,7 @@ const thorough = () => $("#thorough").checked;
 
 function updateModeNote() {
   $("#mode-note").textContent = thorough()
-    ? "Investigates in several steps: 2–4 Gemini calls per question."
+    ? "Investigates in several steps: 2-4 Gemini calls per question."
     : "Fast: usually 1 Gemini call per question. Repeated questions are free.";
   store(MODE_KEY, thorough() ? "1" : "");
 }
@@ -194,7 +194,7 @@ function resetHistory() {
 
 function addWorking() {
   const dots = el("span", { class: "dots", "aria-hidden": "true" }, el("span"), el("span"), el("span"));
-  const label = thorough() ? "Investigating your question…" : "Analyzing your question…";
+  const label = thorough() ? "Investigating your question..." : "Analyzing your question...";
   const item = el("li", { class: "message assistant" },
     el("div", { class: "card" }, el("div", { class: "working" }, dots, el("span", { text: label }))));
   thread().append(item);
@@ -269,7 +269,7 @@ function renderFoot(data) {
       : el("span", { class: "verified warn" }, icon("alert"), document.createTextNode(`Couldn't verify ${data.ungrounded_numbers.join(", ")}`));
     foot.append(verified, el("span", { text: `${plural(data.row_count, "row")}${data.truncated ? " (limited)" : ""}` }));
   }
-  foot.append(el("span", { text: data.cached ? "Cached · 0 Gemini calls" : plural(data.llm_calls, "Gemini call") }));
+  foot.append(el("span", { text: data.cached ? "Cached, 0 Gemini calls" : plural(data.llm_calls, "Gemini call") }));
   foot.append(el("span", { class: "spacer" }));
   if (data.sql) {
     const copy = el("button", { class: "icon-button", type: "button" }, icon("copy"), document.createTextNode("Copy SQL"));
@@ -331,7 +331,7 @@ function renderSteps(steps) {
   return el("ol", { class: "steps" }, ...steps.map((step) => {
     const li = el("li", { class: step.ok ? "" : "fail" },
       el("span", { class: "state" }, icon(step.ok ? "check" : "alert")),
-      el("span", {}, el("code", { text: step.tool }), document.createTextNode(` — ${step.summary}`)),
+      el("span", {}, el("code", { text: step.tool }), document.createTextNode(` - ${step.summary}`)),
       el("span", { class: "ms", text: `${Math.round(step.duration_ms)} ms` }));
     return li;
   }));
@@ -426,7 +426,7 @@ function barChart(spec) {
     }));
     const label = svg("text", { class: "label", x: labelWidth - 8, y: y + bar / 2 + 4, "text-anchor": "end" });
     const maxChars = Math.floor(labelWidth / 7);
-    label.textContent = point.label.length > maxChars ? `${point.label.slice(0, maxChars - 1)}…` : point.label;
+    label.textContent = point.label.length > maxChars ? `${point.label.slice(0, maxChars - 1)}...` : point.label;
     const value = svg("text", { class: "value", x: labelWidth + length + 6, y: y + bar / 2 + 4 });
     value.textContent = formatNumber(point.value);
     g.append(label, value);
@@ -496,7 +496,7 @@ function pill(target, text, ok, iconName) {
 function renderStatus() {
   const health = state.health, gemini = state.gemini;
   if (health) {
-    pill($("#db-pill"), `${health.database} · ${plural(health.tables, "table")}`, true, "database");
+    pill($("#db-pill"), `${health.database} (${plural(health.tables, "table")})`, true, "database");
     $("#entry-status").textContent = `Connected to ${health.database} (${plural(health.tables, "table")}).`;
   } else {
     pill($("#db-pill"), "Database unavailable", false, "database");
@@ -548,7 +548,7 @@ async function start(event) {
   error.hidden = true;
   const button = $("#start");
   button.disabled = true;
-  button.textContent = "Starting…";
+  button.textContent = "Starting...";
   try {
     const data = await post("/welcome", { name });
     state.conversationId = data.conversation_id;
@@ -623,7 +623,7 @@ async function connect(event) {
   }
   const button = $("#connect");
   button.disabled = true;
-  button.textContent = "Checking the key…";
+  button.textContent = "Checking the key...";
   try {
     state.gemini = await post("/setup/gemini", { api_key: apiKey, model, save_to_env_file: $("#save-env").checked });
     $("#api-key").value = "";   // don't keep the key in the page

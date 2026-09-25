@@ -1,17 +1,6 @@
-"""Fast mode: answer a question with one Gemini call.
-
-The agent (agent.py) spends 2-4 calls per question: one to decide on SQL, one to
-write the answer, sometimes more to recover. Fast mode asks Gemini once for both
-the SQL *and* an answer template with placeholders:
-
-    SQL:       SELECT COUNT(*) AS Students FROM ... WHERE sc.City = 'Coimbatore'
-    Template:  "{Students} students attend schools in Coimbatore."
-
-Our code runs the query and fills the placeholders from the real result, so the
-answer's numbers come from the database, not from the model. A second call is made
-only to repair SQL that was rejected or failed. Repeated questions come from a cache
-and cost no calls at all.
-"""
+"""Fast mode: one Gemini call returns the SQL and an answer template such as
+"{Students} students attend schools in Coimbatore."; the placeholders are filled
+from the query result. Failed SQL gets one repair call; repeats come from a cache."""
 import re
 import threading
 import time
@@ -97,8 +86,7 @@ class FastPlan(BaseModel):
 # ---------------------------------------------------------------------------
 
 _PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_ ]*)\}")
-# Years, months and ids are labels. The id match is case-sensitive on purpose:
-# "StudentId" and "student_id" are ids, "TotalPaid" is not.
+# Years, months and ids are labels. Case-sensitive id match so "TotalPaid" isn't one.
 _TIME_COLUMN = re.compile(r"year|month|quarter|week|day|date", re.IGNORECASE)
 _ID_COLUMN = re.compile(r"(^|_)(id|ID)$|Id$")
 
@@ -120,7 +108,7 @@ def format_value(column: str, value: Any) -> str:
         number = float(value)
     except (TypeError, ValueError):
         return str(value)
-    # In a sentence, month 12 reads as "December", not "12" ("301 registrations in 12 of 2025").
+    # In a sentence, show months as names ("December", not "12").
     if "month" in column.lower() and number.is_integer() and 1 <= number <= 12:
         return MONTH_NAMES[int(number) - 1]
     if _is_label_column(column):           # 2026 is a year, not "2,026"

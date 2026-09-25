@@ -70,7 +70,7 @@ def gemini_status() -> dict[str, str | bool | None]:
     return {
         "configured": bool(key and settings.gemini_model),
         "model": settings.gemini_model,
-        "key_hint": f"…{key[-4:]}" if key and len(key) > 8 else None,
+        "key_hint": f"...{key[-4:]}" if key and len(key) > 8 else None,
     }
 
 
@@ -123,7 +123,7 @@ def _base_config(system_instruction: str | None) -> types.GenerateContentConfig:
     return types.GenerateContentConfig(
         temperature=get_settings().gemini_temperature,
         system_instruction=system_instruction,
-        # We call tools ourselves (Milestone 8); stop the SDK doing it implicitly.
+        # Tools are run by our own loop, not by the SDK.
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
 

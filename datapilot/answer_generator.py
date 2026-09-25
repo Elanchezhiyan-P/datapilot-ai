@@ -6,8 +6,7 @@ from datapilot.gemini_client import ask
 
 # Results up to this size are sent to Gemini in full, e.g. 12 months or 40 schools.
 MAX_ROWS_IN_PROMPT = 50
-# Larger results are record listings: Gemini gets only a sample to describe,
-# because the prompt alone did not stop it from listing every row.
+# Larger results are record listings: Gemini only gets a small sample to describe.
 SAMPLE_ROWS_FOR_LISTINGS = 5
 
 SYSTEM_INSTRUCTION = """You explain SQL query results to a non-technical user.
