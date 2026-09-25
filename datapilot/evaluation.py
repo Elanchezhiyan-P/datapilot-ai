@@ -5,9 +5,7 @@
     python -m datapilot.evaluation --system agent       # thorough mode (the agent)
     python -m datapilot.evaluation --system pipeline    # the Milestone 7 pipeline
 
-The benchmark is evaluation/questions.json (10 questions). evaluation/extra_questions.json
-holds more checked questions that are not part of the benchmark; run them only on
-purpose with --file evaluation/extra_questions.json.
+The benchmark is evaluation/questions.json: 10 questions, the same for every mode.
 
 How an answer is judged:
 - answerable question: DataPilot's final query result must match the result of the

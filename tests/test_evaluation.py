@@ -123,12 +123,11 @@ def test_summary_metrics() -> None:
                                             summary, None, results)
 
 
-def test_question_files_are_valid() -> None:
+def test_question_file_is_valid() -> None:
     benchmark = load_questions()
-    extra = load_questions(path=evaluation.BASE_DIR / "evaluation" / "extra_questions.json")
-    ids = [q.id for q in benchmark + extra]
+    ids = [q.id for q in benchmark]
     assert len(ids) == len(set(ids)), "an id appears twice"
-    for q in benchmark + extra:
+    for q in benchmark:
         assert (q.gold_sql is not None) == (q.expected_behavior == "answer"), q.id
 
 
