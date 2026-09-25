@@ -1,4 +1,4 @@
-"""DataPilot HTTP API. Swagger UI: http://localhost:8000/docs
+"""DataPilot HTTP API. Chat UI: http://localhost:8000/  Swagger UI: http://localhost:8000/docs
 
     uvicorn datapilot.api:app --reload
 
@@ -9,22 +9,30 @@ import threading
 import uuid
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from pathlib import Path
+from typing import Annotated, Any, Literal
 
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from datapilot.agent import Agent, AgentResult
-from datapilot.config import ConfigError, get_settings
+from datapilot.config import ConfigError, set_values
 from datapilot.conversation import Conversation
 from datapilot.database import DatabaseError
-from datapilot.gemini_client import GeminiError
+from datapilot.fast_answer import FastAnswerer
+from datapilot.gemini_client import (GeminiError, GeminiNotConfiguredError, gemini_status,
+                                     verify_credentials)
 from datapilot.reporting import (ChartSpec, ColumnSummary, render_html, rows_json_safe,
                                  suggest_chart, summarize, to_csv)
 from datapilot.schema import format_schema_for_prompt
 from datapilot.sql_validator import ValidationResult, validate_sql
+from datapilot.welcome import MAX_NAME_LENGTH, TableCount, build_welcome, clean_name
 
+STATIC_DIR = Path(__file__).parent / "static"
+# The Gemini key can only be set from the machine running DataPilot.
+LOCAL_CLIENTS = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 MAX_ROWS_IN_RESPONSE = 100
 MAX_CONVERSATIONS = 100
 MAX_REPORTS = 100
@@ -94,8 +102,14 @@ SQL_EXAMPLES = {
 # ---------------------------------------------------------------------------
 
 
+Mode = Literal["fast", "thorough"]
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=500, description="A question about the data.")
+    mode: Mode = Field("fast", description=(
+        "fast: one Gemini call per question (SQL + answer template), repeats are cached. "
+        "thorough: the investigating agent, 2-4 calls, for harder questions."))
 
 
 class SqlRequest(BaseModel):
@@ -124,6 +138,9 @@ class AskResponse(BaseModel):
     steps: list[Step] = Field(description="Tool calls the agent made, in order.")
     llm_calls: int
     duration_ms: float
+    chart: ChartSpec = Field(description="Suggested chart for the rows (chosen by rules, no AI).")
+    mode: Mode
+    cached: bool = Field(description="Answered from the cache: no Gemini call was made.")
     conversation_id: str | None = None
 
 
@@ -131,11 +148,40 @@ class ConversationCreated(BaseModel):
     conversation_id: str
 
 
+class WelcomeRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=MAX_NAME_LENGTH, description="How to address the user.")
+    use_ai: bool = Field(False, description="true: Gemini writes the greeting (1 call). "
+                                            "Default: template greeting from the database, no tokens.")
+
+
+class WelcomeResponse(BaseModel):
+    conversation_id: str
+    name: str
+    greeting: str
+    greeting_source: Literal["ai", "template"]
+    counts: list[TableCount] = Field(description="Real row counts per table (plain SQL).")
+    suggestions: list[str]
+
+
 class HealthResponse(BaseModel):
     status: str
     database: str
     tables: int
-    model: str
+    model: str | None
+    gemini_configured: bool
+
+
+class SetupStatus(BaseModel):
+    gemini_configured: bool
+    model: str | None = Field(description="Current model name, if set.")
+    key_hint: str | None = Field(description="Last 4 characters of the key; the key itself is never returned.")
+    get_key_url: str = "https://aistudio.google.com/apikey"
+
+
+class GeminiSetupRequest(BaseModel):
+    api_key: str = Field(min_length=10, max_length=200, description="Gemini API key from Google AI Studio.")
+    model: str = Field(min_length=3, max_length=100, examples=["gemini-2.5-flash-lite"])
+    save_to_env_file: bool = Field(True, description="Also write it to .env so it survives restarts.")
 
 
 class SchemaResponse(BaseModel):
@@ -164,6 +210,10 @@ class ReportResponse(BaseModel):
 
 def _build_agent() -> Agent:
     return Agent()
+
+
+def _build_fast(agent: Agent) -> FastAnswerer:
+    return FastAnswerer(agent.schema)
 
 
 class BoundedStore:
@@ -210,6 +260,7 @@ class StoredReport(BaseModel):
 async def lifespan(app: FastAPI):
     # Discover the schema once at startup instead of on every request.
     app.state.agent = _build_agent()
+    app.state.fast = _build_fast(app.state.agent)
     app.state.conversations = BoundedStore("Conversation", MAX_CONVERSATIONS)
     app.state.reports = BoundedStore("Report", MAX_REPORTS)
     yield
@@ -219,9 +270,14 @@ app = FastAPI(
     title="DataPilot AI",
     description=(
         "**Ask your data. Get intelligent answers.**\n\n"
-        "Natural-language questions are answered by a Gemini agent that inspects the "
-        "schema, writes T-SQL, has it safety-validated, runs it with a read-only login "
-        "and answers from the returned rows only.\n\n"
+        "No Gemini key yet? Open the chat page at `/`, or use `POST /setup/gemini` "
+        "(accepted only from this computer). `GET /setup/status` shows whether it is set.\n\n"
+        "Questions are answered in one of two modes (`mode` on each request):\n\n"
+        "- **fast** (default): one Gemini call returns the SQL and an answer template; the "
+        "numbers are filled in from the query result. Repeated questions come from a cache "
+        "and make no Gemini call.\n"
+        "- **thorough**: an agent that investigates with tools (2-4 calls).\n\n"
+        "Either way the SQL is safety-validated and run with a read-only login.\n\n"
         "Every endpoint has an **Examples** dropdown with sample inputs. "
         "For follow-up questions: `POST /conversations`, then send the three "
         "follow-up examples in order to `POST /conversations/{id}/ask`.\n\n"
@@ -236,6 +292,10 @@ app = FastAPI(
 
 def _agent(request: Request) -> Agent:
     return request.app.state.agent
+
+
+def _answerer(request: Request, mode: str):
+    return request.app.state.fast if mode == "fast" else request.app.state.agent
 
 
 def _summarize(name: str, result: dict[str, Any]) -> tuple[bool, str]:
@@ -257,20 +317,24 @@ def _to_response(result: AgentResult, agent: Agent, conversation_id: str | None 
         ok, summary = _summarize(step.name, step.result)
         steps.append(Step(tool=step.name, args=step.args, ok=ok, summary=summary,
                           duration_ms=step.duration_ms))
+    rows = rows_json_safe(result.rows)
     return AskResponse(
         question=result.question,
         answer=result.answer,
         sql=result.final_sql,
         tables=tables,
         columns=result.columns,
-        rows=result.rows[:MAX_ROWS_IN_RESPONSE],
-        row_count=len(result.rows),
-        truncated=result.truncated or len(result.rows) > MAX_ROWS_IN_RESPONSE,
+        rows=rows[:MAX_ROWS_IN_RESPONSE],
+        row_count=len(rows),
+        truncated=result.truncated or len(rows) > MAX_ROWS_IN_RESPONSE,
         grounded=result.grounded,
         ungrounded_numbers=result.ungrounded_numbers,
         steps=steps,
         llm_calls=result.llm_calls,
         duration_ms=result.duration_ms,
+        chart=suggest_chart(result.question, result.columns, rows),
+        mode="fast" if result.mode == "fast" else "thorough",
+        cached=result.cached,
         conversation_id=conversation_id,
     )
 
@@ -278,6 +342,8 @@ def _to_response(result: AgentResult, agent: Agent, conversation_id: str | None 
 def _run(call):
     try:
         return call()
+    except GeminiNotConfiguredError as e:   # before GeminiError: it is a subclass
+        raise HTTPException(503, {"code": "gemini_not_configured", "message": str(e)}) from e
     except GeminiError as e:
         raise HTTPException(502, f"Gemini error: {e}") from e
     except DatabaseError as e:
@@ -292,11 +358,65 @@ def _run(call):
 # ---------------------------------------------------------------------------
 
 
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def chat_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.post("/welcome", response_model=WelcomeResponse, tags=["Chat"],
+          summary="Start a chat: greet the user by name and summarise the data")
+def welcome(request: Request,
+            body: Annotated[WelcomeRequest, Body(openapi_examples={
+                "template": {"summary": "Greeting from the database (no Gemini call)",
+                             "value": {"name": "Elan"}},
+                "ai": {"summary": "AI-written greeting (1 Gemini call)",
+                       "value": {"name": "Elan", "use_ai": True}},
+            })]) -> WelcomeResponse:
+    name = clean_name(body.name)
+    if not name:
+        raise HTTPException(422, "Enter a name.")
+    agent = _agent(request)
+    result = _run(lambda: build_welcome(name, agent.schema, use_ai=body.use_ai))
+    conversation_id = request.app.state.conversations.add(Conversation(agent))
+    return WelcomeResponse(conversation_id=conversation_id, name=name, **result.model_dump())
+
+
+@app.get("/setup/status", response_model=SetupStatus, tags=["Setup"],
+         summary="Is Gemini connected? (never returns the key)")
+def setup_status() -> SetupStatus:
+    status = gemini_status()
+    return SetupStatus(gemini_configured=status["configured"], model=status["model"],
+                       key_hint=status["key_hint"])
+
+
+@app.post("/setup/gemini", response_model=SetupStatus, tags=["Setup"],
+          summary="Set the Gemini API key and model (checked with Google first; no tokens used)")
+def setup_gemini(request: Request, body: GeminiSetupRequest) -> SetupStatus:
+    if request.client is None or request.client.host not in LOCAL_CLIENTS:
+        raise HTTPException(403, "The Gemini key can only be set from the computer running DataPilot.")
+
+    api_key, model = body.api_key.strip(), body.model.strip()
+    try:
+        verify_credentials(api_key, model)
+    except GeminiError as e:
+        raise HTTPException(400, str(e)) from e
+    try:
+        set_values({"GEMINI_API_KEY": api_key, "GEMINI_MODEL": model}, body.save_to_env_file)
+    except (ConfigError, OSError) as e:
+        raise HTTPException(500, f"Could not save the settings: {e}") from e
+    return setup_status()
+
+
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 def health(request: Request) -> HealthResponse:
     agent = _agent(request)
+    status = gemini_status()
     return HealthResponse(status="ok", database=agent.schema.database_name,
-                          tables=len(agent.schema.tables), model=get_settings().gemini_model)
+                          tables=len(agent.schema.tables), model=status["model"],
+                          gemini_configured=status["configured"])
 
 
 @app.get("/schema", response_model=SchemaResponse, tags=["System"],
@@ -313,7 +433,8 @@ def schema(request: Request) -> SchemaResponse:
 def ask(request: Request,
         body: Annotated[AskRequest, Body(openapi_examples=QUESTION_EXAMPLES)]) -> AskResponse:
     agent = _agent(request)
-    return _run(lambda: _to_response(agent.run(body.question), agent))
+    answerer = _answerer(request, body.mode)
+    return _run(lambda: _to_response(answerer.run(body.question), agent))
 
 
 @app.post("/conversations", response_model=ConversationCreated, status_code=201,
@@ -332,15 +453,16 @@ def ask_in_conversation(
 ) -> AskResponse:
     conversation = request.app.state.conversations.get(conversation_id)
     agent = _agent(request)
-    return _run(lambda: _to_response(conversation.ask(body.question), agent, conversation_id))
+    answerer = _answerer(request, body.mode)
+    return _run(lambda: _to_response(conversation.ask(body.question, answerer), agent, conversation_id))
 
 
 @app.post("/report", response_model=ReportResponse, tags=["Reports"],
           summary="Answer a question as a report: table, summary statistics and a chart")
 def create_report(request: Request,
                   body: Annotated[AskRequest, Body(openapi_examples=REPORT_EXAMPLES)]) -> ReportResponse:
-    agent = _agent(request)
-    result = _run(lambda: agent.run(body.question))
+    answerer = _answerer(request, body.mode)
+    result = _run(lambda: answerer.run(body.question))
     rows = rows_json_safe(result.rows)
     report = StoredReport(
         question=result.question, answer=result.answer, sql=result.final_sql,

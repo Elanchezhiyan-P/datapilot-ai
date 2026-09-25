@@ -88,6 +88,8 @@ class AgentResult(BaseModel):
     llm_calls: int = 0
     stopped_early: bool = False
     duration_ms: float = 0.0
+    mode: str = "thorough"
+    cached: bool = False
 
 
 def build_question_message(question: str, history: list[HistoryTurn]) -> types.Content:

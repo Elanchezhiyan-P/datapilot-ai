@@ -1,9 +1,12 @@
 /*
-    Read-only SQL login for DataPilot.
+    03 - Read-only SQL login for DataPilot.
 
-    Run in SSMS with an ADMIN login, after 01_create_datapilotlab.sql.
-    Replace the password placeholder; put the same value in .env as DB_PASSWORD.
-    Requires SQL Server authentication (mixed mode) to be enabled.
+    Run in SSMS with an ADMIN login, after 02_seed_data.sql. Safe to re-run.
+    Before running: replace <choose-a-strong-password> below, and put the same value
+    in .env as DB_PASSWORD. (If the login already exists, its password is not changed.)
+    Requires SQL Server authentication (mixed mode) to be enabled; see sql/README.md.
+
+    Next: 04_verify_setup.sql
 */
 USE master;
 GO

@@ -1,8 +1,9 @@
 """Evaluation: run the benchmark questions and measure DataPilot.
 
     python -m datapilot.evaluation --dry-run            # gold SQL + validator only, no Gemini
-    python -m datapilot.evaluation --limit 10           # first 10 questions (asks first)
-    python -m datapilot.evaluation --system pipeline    # measure the Milestone 7 pipeline
+    python -m datapilot.evaluation --limit 10           # first 10 questions, fast mode (asks first)
+    python -m datapilot.evaluation --system agent       # thorough mode (the agent)
+    python -m datapilot.evaluation --system pipeline    # the Milestone 7 pipeline
 
 How an answer is judged:
 - answerable question: DataPilot's final query result must match the result of the
@@ -37,7 +38,8 @@ RESULTS_DIR = BASE_DIR / "evaluation" / "results"
 NUMBER_TOLERANCE = 0.05
 GOLD_MAX_ROWS = 60
 HALLUCINATION_MARKERS = ("Invalid column name", "Invalid object name", "Table is not allowed")
-CALLS_PER_QUESTION_RANGE = (2, 4)
+# Rough Gemini calls per question, for the cost estimate shown before a run.
+CALLS_PER_QUESTION = {"fast": (1, 2), "agent": (2, 4), "pipeline": (2, 2)}
 
 
 class Question(BaseModel):
@@ -350,7 +352,7 @@ def dry_run(questions: list[Question]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--system", choices=["agent", "pipeline"], default="agent")
+    parser.add_argument("--system", choices=["fast", "agent", "pipeline"], default="fast")
     parser.add_argument("--limit", type=int, help="only the first N questions")
     parser.add_argument("--ids", nargs="+", help="only these question ids")
     parser.add_argument("--dry-run", action="store_true", help="gold SQL + validator only, no Gemini")
@@ -362,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return dry_run(questions)
 
-    low, high = (n * len(questions) for n in CALLS_PER_QUESTION_RANGE)
+    low, high = (n * len(questions) for n in CALLS_PER_QUESTION[args.system])
     print(f"{len(questions)} question(s) with the {args.system}: roughly {low}-{high} Gemini calls.")
     if not args.yes and input("Continue? [y/N] ").strip().lower() != "y":
         print("Cancelled.")
@@ -370,7 +372,14 @@ def main(argv: list[str] | None = None) -> int:
 
     from datapilot.agent import Agent
     agent = Agent()
-    run = agent_runner(agent) if args.system == "agent" else pipeline_runner(agent.schema)
+    if args.system == "fast":
+        from datapilot.fast_answer import AnswerCache, FastAnswerer
+        # A cache that never hits: every benchmark question must really be answered.
+        run = agent_runner(FastAnswerer(agent.schema, cache=AnswerCache(size=0)))
+    elif args.system == "agent":
+        run = agent_runner(agent)
+    else:
+        run = pipeline_runner(agent.schema)
 
     results = []
     for number, question in enumerate(questions, start=1):

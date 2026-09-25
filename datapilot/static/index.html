@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en" data-look="workspace">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataPilot AI</title>
+  <meta name="description" content="Ask questions about the school exam database in plain English.">
+  <!-- Apply the saved design before first paint, so the page doesn't flash. -->
+  <script>
+    try {
+      var look = localStorage.getItem("datapilot.look");
+      document.documentElement.dataset.look = look === "deck" ? "deck" : "workspace";
+    } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Design switcher for the setup and welcome screens (the chat has its own in the top bar) -->
+  <div id="look-bar" class="look-bar">
+    <label for="look-front">Design</label>
+    <select id="look-front" class="look-select"></select>
+  </div>
+
+  <!-- Setup: shown when no Gemini key is configured -->
+  <div id="setup" class="entry" hidden>
+    <section class="entry-intro" aria-hidden="true">
+      <div class="logo"><span class="logo-mark"></span>DataPilot</div>
+      <h1 class="entry-title">Connect Gemini to get started.</h1>
+      <p class="entry-lede">DataPilot uses Google's Gemini to turn your questions into SQL. The key stays on this computer.</p>
+    </section>
+    <main class="entry-panel">
+      <form id="setup-form" class="entry-card" novalidate>
+        <h2>Connect Gemini</h2>
+        <p class="card-lede">Paste an API key. You can create one in
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.</p>
+
+        <label class="field-label" for="api-key">API key</label>
+        <input id="api-key" class="text-input mono" type="password" autocomplete="off" spellcheck="false" required>
+
+        <label class="field-label" for="model">Model</label>
+        <input id="model" class="text-input mono" autocomplete="off" spellcheck="false" required>
+
+        <label class="checkbox">
+          <input id="save-env" type="checkbox" checked>
+          <span>Remember it after a restart (saves to <code>.env</code> on this computer)</span>
+        </label>
+        <p id="setup-error" class="form-error" role="alert" hidden></p>
+
+        <button id="connect" class="button primary block" type="submit">Connect Gemini</button>
+        <p class="fineprint">The key is checked with Google first, which uses no tokens. It's never shown again and can only be set from this computer.</p>
+        <button id="setup-back" class="link" type="button" hidden>Back</button>
+      </form>
+    </main>
+  </div>
+
+  <!-- Welcome: ask for a name first -->
+  <div id="welcome" class="entry" hidden>
+    <section class="entry-intro">
+      <div class="logo"><span class="logo-mark" aria-hidden="true"></span>DataPilot</div>
+      <h1 class="entry-title">Ask your data.<br><span>Get answers you can check.</span></h1>
+      <p class="entry-lede">Ask about schools, students, exams, registrations, payments and results in plain English.</p>
+      <ul class="trust-list">
+        <li><span class="trust-icon" data-icon="shield"></span><div><strong>Read-only by design</strong><p>Queries are safety-checked and run with a login that can't change data.</p></div></li>
+        <li><span class="trust-icon" data-icon="check"></span><div><strong>Numbers come from the database</strong><p>Every figure in an answer is filled in from the query result.</p></div></li>
+        <li><span class="trust-icon" data-icon="code"></span><div><strong>See how each answer was found</strong><p>The SQL, the data and each step are one click away.</p></div></li>
+      </ul>
+      <p id="entry-status" class="entry-status"></p>
+    </section>
+    <main class="entry-panel">
+      <form id="welcome-form" class="entry-card" novalidate>
+        <h2>Get started</h2>
+        <p class="card-lede">Tell DataPilot what to call you.</p>
+        <label class="field-label" for="name">Your name</label>
+        <input id="name" name="name" class="text-input" autocomplete="given-name" maxlength="40"
+               spellcheck="false" placeholder="Elan" required>
+        <p id="welcome-error" class="form-error" role="alert" hidden></p>
+        <button id="start" class="button primary block" type="submit">Start chatting</button>
+        <p class="fineprint">Starting a chat uses no Gemini tokens.</p>
+        <p class="fineprint gemini-line">
+          <span id="gemini-line"></span>
+          <button id="change-key" class="link" type="button">Change key</button>
+        </p>
+      </form>
+    </main>
+  </div>
+
+  <!-- Chat -->
+  <div id="chat" class="chat" hidden>
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="logo small"><span class="logo-mark" aria-hidden="true"></span>DataPilot</div>
+        <span id="db-pill" class="pill"></span>
+        <span id="model-pill" class="pill"></span>
+      </div>
+      <div class="topbar-right">
+        <label class="visually-hidden" for="look-chat">Design</label>
+        <select id="look-chat" class="look-select"></select>
+        <button id="new-chat" class="button quiet" type="button"><span data-icon="plus"></span>New chat</button>
+        <span id="avatar" class="avatar" role="img"></span>
+      </div>
+    </header>
+
+    <aside id="sidebar" class="sidebar" aria-label="Chat sidebar">
+      <section class="side-section side-counts">
+        <h2 class="side-title">In the database</h2>
+        <dl id="side-counts" class="side-list"></dl>
+      </section>
+      <section class="side-section side-suggestions">
+        <h2 class="side-title">Suggested questions</h2>
+        <div id="side-suggestions" class="side-links"></div>
+      </section>
+      <section class="side-section side-history">
+        <h2 id="history-title" class="side-title">Recent questions</h2>
+        <ol id="history" class="side-history-list">
+          <li class="side-empty">Questions you ask appear here.</li>
+        </ol>
+      </section>
+    </aside>
+
+    <main class="thread-wrap">
+      <ol id="thread" class="thread" aria-live="polite"></ol>
+    </main>
+
+    <form id="composer" class="composer">
+      <div class="composer-box">
+        <label class="visually-hidden" for="question">Ask a question</label>
+        <textarea id="question" rows="1" maxlength="500"
+                  placeholder="Ask a question, for example: Which school had the highest average score in 2026?"></textarea>
+        <button id="send" class="send" type="submit" aria-label="Send question"><span data-icon="send"></span></button>
+      </div>
+      <div class="composer-row">
+        <label class="switch">
+          <input id="thorough" type="checkbox">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span>Thorough mode</span>
+        </label>
+        <span id="mode-note" class="fineprint"></span>
+        <span class="fineprint keys">Enter to send · Shift+Enter for a new line</span>
+      </div>
+    </form>
+  </div>
+
+  <div id="tooltip" class="tooltip" role="status" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

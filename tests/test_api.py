@@ -34,6 +34,7 @@ class FakeAgent:
 def client(monkeypatch: pytest.MonkeyPatch):
     fake = FakeAgent()
     monkeypatch.setattr(api, "_build_agent", lambda: fake)
+    monkeypatch.setattr(api, "_build_fast", lambda agent: agent)   # fake serves both modes
     with TestClient(api.app) as test_client:
         test_client.fake_agent = fake
         yield test_client
@@ -89,6 +90,36 @@ def test_report_returns_chart_and_download_links(client) -> None:
 
 def test_unknown_report_is_404(client) -> None:
     assert client.get("/reports/nope.csv").status_code == 404
+
+
+def test_chat_page_is_served_at_root(client) -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Get started" in response.text and "Thorough mode" in response.text
+    assert client.get("/static/app.js").status_code == 200
+
+
+def test_welcome_greets_and_starts_a_conversation(client, monkeypatch) -> None:
+    from datapilot import welcome
+    monkeypatch.setattr(welcome, "table_counts", lambda schema: [
+        welcome.TableCount(table="dbo.Students", label="Students", rows=3000)])
+
+    body = client.post("/welcome", json={"name": "  Elan ", "use_ai": False}).json()
+
+    assert body["name"] == "Elan"
+    assert body["greeting_source"] == "template"
+    assert body["counts"][0]["rows"] == 3000
+    ask = client.post(f"/conversations/{body['conversation_id']}/ask", json={"question": "How many?"})
+    assert ask.status_code == 200
+
+
+def test_blank_name_is_rejected(client) -> None:
+    assert client.post("/welcome", json={"name": "   "}).status_code == 422
+
+
+def test_ask_includes_a_chart_suggestion(client) -> None:
+    body = client.post("/ask", json={"question": "How many students?"}).json()
+    assert body["chart"]["type"] == "none"   # one row: a number, not a chart
 
 
 def test_swagger_lists_sample_questions(client) -> None:
