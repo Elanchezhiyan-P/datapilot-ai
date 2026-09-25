@@ -85,6 +85,7 @@ class QuestionResult(BaseModel):
     executed: bool = False
     sql_attempts: int = 0
     sql_errors: int = 0
+    error_messages: list[str] = []
     hallucinated_identifiers: int = 0
     blocked_by_validator: int = 0
     llm_calls: int = 0
@@ -200,6 +201,7 @@ def evaluate_question(question: Question, run: Callable[[str], Outcome]) -> Ques
     record.executed = any(a.ok for a in outcome.attempts)
     errors = [a.error or "" for a in outcome.attempts if not a.ok]
     record.sql_errors = len(errors)
+    record.error_messages = [error[:300] for error in errors]   # why each attempt failed
     record.hallucinated_identifiers = sum(any(m in e for m in HALLUCINATION_MARKERS) for e in errors)
     record.blocked_by_validator = sum("safety checks" in e or "Only SELECT" in e for e in errors)
 
@@ -315,6 +317,8 @@ def to_markdown(meta: dict[str, Any], summary: dict[str, Any],
     lines += ["", f"## Failures ({len(failures)})", ""]
     for r in failures:
         lines.append(f"- **{r.id}** {r.question} → {r.reason}")
+        for message in r.error_messages:
+            lines.append(f"  - SQL attempt failed: {message}")
     return "\n".join(lines) + "\n"
 
 

@@ -240,14 +240,40 @@ comparisons) and 8 that must be refused (3 unanswerable, 5 unsafe).
 
 **Results**
 
-| Metric | Value |
-|---|---|
-| SQL validator corpus: unsafe statements blocked | **25 / 25** (measured) |
-| SQL validator corpus: safe statements accepted | **15 / 15** (measured) |
-| Benchmark accuracy, refusals, latency, tokens | **not yet measured** |
+SQL validator corpus (no model involved): **25 / 25** unsafe statements blocked,
+**15 / 15** safe statements accepted.
 
-The benchmark has not been run yet. Results will be written to
-`evaluation/results/` by the runner and copied here only from actual runs.
+**Sample benchmark run** — 25 September 2026, `gemini-2.5-flash-lite`, **10 of the 47
+questions** (one or two per category: `basic-01`, `join-01`, `coded-02`, `agg-02`,
+`group-02`, `date-02`, `rank-01`, `hard-01`, `hard-04`, `unsafe-02`), same questions for
+every mode. The full 47-question set has not been run yet.
+
+| Metric | Fast (default) | Thorough (agent) | Pipeline (Milestone 7) |
+|---|---|---|---|
+| Answer accuracy (result matches gold SQL) | **8 / 9** (88.9%) | 7 / 9 (77.8%) | **9 / 9** (100%) |
+| Unsafe question refused, no query run | 1 / 1 | 1 / 1 | 1 / 1 |
+| Hallucinated table/column errors | 0 of 10 attempts | 1 of 12 attempts | 0 of 9 attempts |
+| Gemini calls, total (average per question) | **11 (1.1)** | 25 (2.5) | 19 (1.9) |
+| Tokens, prompt / output | 10,652 / 1,731 | 39,750 / 1,850 | 10,097 / 1,980 |
+| Response time, average / p95 | 2.7 s / 7.5 s | 4.8 s / 16.5 s | 3.2 s / 4.8 s |
+
+What failed, and why:
+
+- **Participation rate by city** (`hard-01`) is the hardest question: it needs a ratio
+  with the right denominator. Fast mode's SQL was rejected twice, so it answered *"I
+  couldn't write a working query"*, a safe failure with no wrong number. Thorough mode
+  answered **Mysuru, 95.97%**; the correct answer is **Madurai, 76.96%**. The number came
+  from a real query with a wrong denominator, which is exactly the kind of
+  "believable but wrong" answer the grounding check can't catch and this benchmark can.
+- **Average score for Level 5-6** (`agg-02`): thorough mode filtered on `'5-6'` instead of
+  the real value `'Level 5-6'`, got no rows and said there were no results. It skipped
+  the check-the-real-values step its instructions ask for.
+
+How to read this: 9 answerable questions is a **small sample**, so a difference of one or
+two questions between modes isn't a reliable ranking. What the run does show clearly is
+the cost: fast mode used **56% fewer calls** and **73% fewer prompt tokens** than
+thorough mode on the same questions, and the extra agent steps didn't buy accuracy here.
+Per-question details are in `evaluation/results/`.
 
 ```bash
 python -m datapilot.evaluation --dry-run        # gold SQL + validator only, no Gemini calls
@@ -383,9 +409,10 @@ tests/                      pytest suite
 
 ## Limitations
 
-- **Accuracy is unmeasured** until the benchmark is run. Spot checks found wrong
-  answers, e.g. a participation-rate question answered with the wrong denominator.
-  The grounding check cannot catch a wrong query whose numbers are reported faithfully.
+- **Accuracy is only sampled.** A 10-question run measured 8/9 (fast), 7/9 (thorough)
+  and 9/9 (pipeline); the full 47-question benchmark hasn't been run. Ratio questions
+  (like participation rate) are the weak spot, and the grounding check cannot catch a
+  wrong query whose numbers are reported faithfully.
 - **No authentication or authorization.** Local development only.
 - **In-memory state.** Conversations and reports are lost on restart.
 - **Whole schema in the prompt.** Fine for 6 tables; a large database would need

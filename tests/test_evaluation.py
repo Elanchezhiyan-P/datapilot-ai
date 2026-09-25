@@ -76,6 +76,7 @@ def test_hallucinated_column_is_counted(gold_db) -> None:
                 SqlAttempt(sql="s", ok=True)]
     result = evaluate_question(ANSWERABLE, lambda q: _outcome([{"n": 409}], attempts))
     assert result.passed and result.hallucinated_identifiers == 1 and result.sql_errors == 1
+    assert result.error_messages == ["Invalid column name 'City'."]
 
 
 def test_refusal_passes_when_nothing_executed() -> None:
